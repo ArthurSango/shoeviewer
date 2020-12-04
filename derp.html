@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <title>Babylon Template</title>
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+        <script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+    </head>
+   <body>
+    <canvas id="renderCanvas" touch-action="none"></canvas> <!-- touch-action="none" for best results from PEP -->
+
+    <script>let engine, canvas, scene 
+        const createEngine = (hostCanvas) => {
+ canvas = hostCanvas
+  engine = new BABYLON.Engine(canvas, true, {}, true)
+
+  const handleResize = () => engine.resize()
+  window.addEventListener('resize', handleResize)
+
+  return engine
+}
+
+const createScene = () => {
+  scene = new BABYLON.Scene(engine)
+
+  scene.clearColor = new BABYLON.Color4(0.8, 0.8, 0.8, 1)
+
+  // optimize scene for opaque background
+  scene.autoClear = false
+  scene.autoClearDepthAndStencil = false
+
+  // show the inspector when pressing shift + alt + I
+  scene.onKeyboardObservable.add(({ event }) => {
+    if (event.ctrlKey && event.shiftKey && event.code === 'KeyI') {
+      if (scene.debugLayer.isVisible()) {
+        scene.debugLayer.hide()
+      } else {
+        scene.debugLayer.show()
+      }
+    }
+  })
+
+  return scene
+}
+
+const createArcRotateCamera = () => {
+    const startAlpha = -1.5
+    const startBeta = 1.4
+    const startRadius = 100
+    const startPosition = new BABYLON.Vector3(0, 10, 0)
+    const camera = new BABYLON.ArcRotateCamera('camera', startAlpha, startBeta, startRadius, startPosition, scene, true)
+    camera.attachControl(canvas, false)
+
+    // Set some basic camera settings
+    camera.minZ = 1 // clip at 1 meter
+
+    camera.panningAxis = new BABYLON.Vector3(1, 0, 1) // pan along ground
+    camera.panningSensibility = 1000 // how fast do you pan, set to 0 if you don't want to allow panning
+    camera.panningOriginTarget = BABYLON.Vector3.Zero() // where does the panning distance limit originate from
+    camera.panningDistanceLimit = 100 // how far can you pan from the origin
+    
+    camera.allowUpsideDown = false // don't allow zooming inverted
+    camera.lowerRadiusLimit = 2 // how close can you zoom
+    camera.upperRadiusLimit = 100 // how far out can you zoom
+    camera.lowerBetaLimit = 0.5 // how high can you move the camera
+    camera.upperBetaLimit = 1.4 // how low down can you move the camera
+    
+    camera.checkCollisions = true // make the camera collide with meshes
+    camera.collisionRadius = new BABYLON.Vector3(2, 2, 2) // how close can the camera go to other meshes
+
+    return camera
+}
+
+const createPBRSkybox = () => {
+  const environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
+    'https://assets.babylonjs.com/environments/environmentSpecular.env',
+    scene,
+  )
+  
+  const skyboxMesh = scene.createDefaultSkybox(environmentTexture, true, 1000, 0.5, true)
+  
+  return skyboxMesh
+}
+
+  
+
+const {
+  HemisphericLight,
+  SpotLight,
+  PointLight,
+  DirectionalLight,
+  Vector3,
+  MeshBuilder,
+  PBRMetallicRoughnessMaterial,
+  Color3,
+  SceneLoader,
+  StandardMaterial,
+  Engine
+} = BABYLON
+
+
+// Import stylesheets
+// import './index.css';
+
+const renderButton = document.createElement("button");
+document.body.appendChild(renderButton);
+renderButton.textContent = "RENDER";
+renderButton.style.position = "absolute";
+renderButton.id = "renderButton";
+
+renderButton.style.top = "50px";
+renderButton.style.left = "50px";
+
+ canvas = document.getElementById(
+  "renderCanvas"
+) 
+engine = createEngine(canvas);
+scene = createScene();
+
+
+function getQueryVariable(variable ="") {
+  var query = window.location.search.substring(1);
+  var vars = query.split('&');
+  for (var i = 0; i < vars.length; i++) {
+      var pair = vars[i].split('=');
+      if (decodeURIComponent(pair[0]) == variable) {
+          return decodeURIComponent(pair[1]);
+      }
+  }
+  console.log('Query variable %s not found', variable);
+}
+
+// main function that is async so we can call the scene manager with await
+const main = async () => {
+
+
+  window.Engine = Engine 
+  const sky = createPBRSkybox();
+  var camera = createArcRotateCamera();
+
+  camera.useFramingBehavior = true;
+
+  var light = new BABYLON.PointLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+  light.diffuse = new BABYLON.Color3(0, 0, 1);
+  light.specular = new BABYLON.Color3(0, 0, 1);
+
+  //  SceneLoader.Append("./", "chuteira.obj", scene, function (scene) {
+
+  console.log("Start model load")
+
+  BABYLON.SceneLoader.Append("./nike/", "scene.gltf", scene, function (scene) {
+    const root = scene.meshes[1];
+    const shoe = scene.meshes[2];
+ 
+    shoe.scaling = new BABYLON.Vector3(30, 30, 30);
+
+
+    const x = getQueryVariable("x")
+    const y = getQueryVariable("y")
+    const z = getQueryVariable("z")
+   
+    
+    if (x && y && z){ // if we have coordinates in the URL, this means the page is being accessed by the server
+      engine.runRenderLoop(() => { // we need to set the camera position each render loop, or it will always default to the same position
+          camera.setPosition(
+            new BABYLON.Vector3(parseFloat(x), parseFloat(y), parseFloat(z))
+          );
+        camera.setTarget(shoe);
+        scene.render();
+      });
+
+    } else { // page is being accessed from browser, use normal update logic
+     camera.setPosition(new BABYLON.Vector3(60, -10, -50));
+     camera.setTarget(shoe);
+     engine.runRenderLoop(() => {scene.render()})
+    }
+    console.log("READY")
+    
+    // open new page 
+    renderButton.addEventListener("click", (_) => {
+      console.log(camera);
+      const urlParams =
+        "?" +
+        "x=" +
+        camera._position.x +
+        "&" +
+        "y=" +
+        camera._position.y +
+        "&" +
+        "z=" +
+        camera._position.z 
+      // const renderURL = "http://localhost:8080/pic.png"
+
+      const renderURL = "http://localhost:8080/pic/";
+      // window.location.href = renderURL + urlParams;
+      window.open( renderURL + urlParams, "_blank" )
+    });
+  });
+
+
+};
+
+main();
+
+    </script>
+   </body>
+</html>
